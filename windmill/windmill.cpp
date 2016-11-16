@@ -1,4 +1,4 @@
-/* windmill
+﻿/* windmill
  * Copyright 2016 Nick Earwood <nearwood@gmail.com>
  */
 
@@ -18,32 +18,34 @@
  */
 
 /* windmill - save/restore window positions via the tray
- * Phase 0: Basic Win32 tray app
- * Phase 1: Save and restore window positions manually via tray menu
- * Phase 2: Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
- * Phase 3: Allow configuration of trigger hardware.
- * Phase C: Cmake for possible cross-platform support?
+ * Phase 0: ✔   Basic Win32 tray app
+ * Phase 1: WIP Save window positions manually via tray menu (to registry)
+ * Phase 2:     Restore window positions manually via tray menu (from registry)
+ * Phase 2:     32/64-bit compatibility
+ * Phase 3:     Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
+ * Phase 4:     Allow configuration of trigger hardware
+ * Phase C:     Cmake for possible cross-platform support?
  */
 
 #include "stdafx.h"
 #include "windmill.h"
 
 //kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)
-//kernel32.lib;user32.lib;shell32.lib;%(AdditionalDependencies)
 
 #define MAX_LOADSTRING 100
 #define ID_TRAY_ICON   1
-#define SWM_TRAYMSG WM_APP //Message ID range: WM_APP through 0xBFFF
-#define SWM_SHOW    WM_APP + 1
-#define SWM_HIDE    WM_APP + 2
-#define SWM_EXIT    WM_APP + 3
+#define SWM_TRAYMSG    WM_APP //Message ID range: WM_APP through 0xBFFF
+#define SWM_SAVE       WM_APP + 1
+#define SWM_RESTORE    WM_APP + 2
+#define SWM_SHOW       WM_APP + 3
+#define SWM_HIDE       WM_APP + 4
+#define SWM_EXIT       WM_APP + 5
 
 HINSTANCE hInst;
 WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 NOTIFYICONDATA niData;
 
-// Forward declarations of functions included in this code module:
 ATOM MyRegisterClass(HINSTANCE hInstance);
 BOOL InitInstance(HINSTANCE, int);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -131,18 +133,23 @@ void ShowContextMenu(HWND hWnd)
 	POINT pt;
 	GetCursorPos(&pt);
 	HMENU hMenu = CreatePopupMenu();
+
 	if (hMenu)
 	{
+		AppendMenu(hMenu, MF_STRING, SWM_SAVE, _T("Save windows"));
+		AppendMenu(hMenu, MF_STRING, SWM_RESTORE, _T("Restore windows"));
+		AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+
 		if (IsWindowVisible(hWnd))
 		{
-			InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_HIDE, _T("Hide"));
+			AppendMenu(hMenu, MF_STRING, SWM_HIDE, _T("Hide"));
 		}
 		else
 		{
-			InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_SHOW, _T("Show"));
+			AppendMenu(hMenu, MF_STRING, SWM_SHOW, _T("Show"));
 		}
 			
-		InsertMenu(hMenu, -1, MF_BYPOSITION, SWM_EXIT, _T("Exit"));
+		AppendMenu(hMenu, MF_STRING, SWM_EXIT, _T("Exit"));
 
 		//Set menu to the foreground or it won't appear.
 		SetForegroundWindow(hWnd);
@@ -170,7 +177,7 @@ BOOL OnInitDialog(HWND hWnd)
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
-	hInst = hInstance; // Store instance handle in our global variable
+	hInst = hInstance;
 
 	HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
 		0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
@@ -199,7 +206,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 	Shell_NotifyIcon(NIM_ADD, &niData);
 
-	// free icon handle
 	if (niData.hIcon && DestroyIcon(niData.hIcon))
 	{
 		niData.hIcon = NULL;
@@ -207,6 +213,92 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 	//ShowWindow(hWnd, nCmdShow);
 	//UpdateWindow(hWnd);
+
+	return TRUE;
+}
+
+//MSDN example
+void handleError(LPCTSTR lpszFunction) {
+	LPVOID lpMsgBuf;
+	LPVOID lpDisplayBuf;
+	DWORD dw = GetLastError();
+
+	FormatMessage(
+		FORMAT_MESSAGE_ALLOCATE_BUFFER |
+		FORMAT_MESSAGE_FROM_SYSTEM |
+		FORMAT_MESSAGE_IGNORE_INSERTS,
+		NULL,
+		dw,
+		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+		(LPTSTR)&lpMsgBuf,
+		0, NULL);
+
+	lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT,
+		(lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40) * sizeof(TCHAR));
+	StringCchPrintf((LPTSTR)lpDisplayBuf,
+		LocalSize(lpDisplayBuf) / sizeof(TCHAR),
+		TEXT("%s failed with error %d: %s"),
+		lpszFunction, dw, lpMsgBuf);
+	MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK);
+
+	LocalFree(lpMsgBuf);
+	LocalFree(lpDisplayBuf);
+	//ExitProcess(dw);
+}
+
+BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
+	if (hWnd == NULL || !IsWindowVisible(hWnd)) {
+		return TRUE;
+	}
+
+	//TODO use std::codecvt
+	//LPWSTR windowClassName;
+	//LPWSTR windowTitle;
+	char windowClassName[255] = {0};
+	char windowTitle[255] = {0};
+
+	GetClassNameA(hWnd, (LPSTR)windowClassName, sizeof(windowClassName));
+	GetWindowTextA(hWnd, (LPSTR)windowTitle, sizeof(windowTitle));
+
+	/* BOOL WINAPI GetWindowRect(_In_  HWND   hWnd, _Out_ LPRECT lpRect);*/
+	RECT windowRect;
+	BOOL result = GetWindowRect(hWnd, &windowRect);
+	if (result) {
+		HKEY hKey;
+		LPWSTR lpcsKey = TEXT("SOFTWARE\\Windmill");
+		LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, NULL);
+		if (openRes == ERROR_SUCCESS) {
+			//error there was no error lol
+			LPCSTR value = windowTitle; //windowClassName + ":" + windowTitle; //rely on hWnd???
+			//REG_DWORD data = hWnd; //RECT data
+
+			//LPCTSTR data = TEXT("OtherTestData\0");
+
+			LONG setRes = RegSetValueExA(hKey, value, 0, REG_QWORD, (LPBYTE)hWnd, sizeof(hWnd));
+
+			if (setRes == ERROR_SUCCESS) {
+				
+			}
+			else {
+				//handleError(L"RegSetValueExA");
+			}
+
+			LONG closeOut = RegCloseKey(hKey);
+
+			if (closeOut == ERROR_SUCCESS) {
+
+			}
+			else {
+				//handleError(L"RegCloseKey");
+			}
+		} else {
+			//handleError(L"RegCreateKeyEx");
+		}
+	}
+	else {
+		//handleError(L"GetWindowRect");
+		//handle unqueryable windows? ignore them?
+	}
 
 	return TRUE;
 }
@@ -245,16 +337,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		switch (wmId)
 		{
+		case SWM_SAVE:
+			EnumWindows(EnumWindowsProc, NULL);
+			break;
+
+		case SWM_RESTORE:
+			/* BOOL WINAPI SetWindowPos(
+			  _In_     HWND hWnd,
+			  _In_opt_ HWND hWndInsertAfter,
+			  _In_     int  X,
+			  _In_     int  Y,
+			  _In_     int  cx,
+			  _In_     int  cy,
+			  _In_     UINT uFlags
+			);*/
+			break;
+
 		case SWM_SHOW:
 			ShowWindow(hWnd, SW_RESTORE);
 			break;
+
 		case SWM_HIDE:
 		case IDOK:
 			ShowWindow(hWnd, SW_HIDE);
 			break;
+
 		case SWM_EXIT:
 			DestroyWindow(hWnd);
 			break;
+
 		case IDM_ABOUT:
 			DialogBox(hInst, (LPCTSTR)IDD_ABOUTBOX, hWnd, About);
 			break;
@@ -278,7 +389,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			PAINTSTRUCT ps;
 			HDC hdc = BeginPaint(hWnd, &ps);
-			// TODO: Add any drawing code that uses hdc here...
 			EndPaint(hWnd, &ps);
 		}
 		break;
@@ -289,7 +399,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-// Message handler for about box.
 INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	UNREFERENCED_PARAMETER(lParam);

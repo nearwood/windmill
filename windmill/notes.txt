@@ -1,0 +1,4 @@
+
+
+EnumWindows has access violations when trying to access (I'm guessing) 64-bit windows when compiled as 32-bit.
+Should not be run as 32-bit on 64-bit Windows.
