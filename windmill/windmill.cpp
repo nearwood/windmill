@@ -18,12 +18,12 @@
  */
 
 /* windmill - save/restore window positions via the tray
- * Phase 0: ✔   Basic Win32 tray app
+ * Phase 0: ✔  Basic Win32 tray app
  * Phase 1: WIP Save window positions manually via tray menu (to registry)
  * Phase 2:     Restore window positions manually via tray menu (from registry)
- * Phase 2:     32/64-bit compatibility
- * Phase 3:     Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
- * Phase 4:     Allow configuration of trigger hardware
+ * Phase 3:     32/64-bit compatibility
+ * Phase 4:     Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
+ * Phase 5:     Allow configuration of trigger hardware
  * Phase C:     Cmake for possible cross-platform support?
  */
 
@@ -260,6 +260,9 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 	GetClassNameA(hWnd, (LPSTR)windowClassName, sizeof(windowClassName));
 	GetWindowTextA(hWnd, (LPSTR)windowTitle, sizeof(windowTitle));
 
+	OutputDebugStringA(windowTitle);
+	OutputDebugString(_T("\r\n"));
+
 	/* BOOL WINAPI GetWindowRect(_In_  HWND   hWnd, _Out_ LPRECT lpRect);*/
 	RECT windowRect;
 	BOOL result = GetWindowRect(hWnd, &windowRect);
@@ -274,12 +277,13 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 
 			//LPCTSTR data = TEXT("OtherTestData\0");
 
-			LONG setRes = RegSetValueExA(hKey, value, 0, REG_QWORD, (LPBYTE)hWnd, sizeof(hWnd));
+			LONG setRes = RegSetValueExA(hKey, value, 0, REG_QWORD, (LPBYTE)&hWnd, sizeof(hWnd));
 
 			if (setRes == ERROR_SUCCESS) {
 				
 			}
 			else {
+				OutputDebugString(_T("RegSetValueExA failed\r\n"));
 				//handleError(L"RegSetValueExA");
 			}
 
@@ -289,9 +293,11 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 
 			}
 			else {
+				OutputDebugString(_T("RegCloseKey failed\r\n"));
 				//handleError(L"RegCloseKey");
 			}
 		} else {
+			OutputDebugString(_T("RegCreateKeyEx failed\r\n"));
 			//handleError(L"RegCreateKeyEx");
 		}
 	}
