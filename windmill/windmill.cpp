@@ -246,19 +246,32 @@ void handleError(LPCTSTR lpszFunction) {
 	//ExitProcess(dw);
 }
 
+//TODO lParam should probably be {SAVE, RESTORE} or sth like that, not a PHKEY
+//Just make hKey global, it's C fcs...
+
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
-	if (hWnd == NULL || !IsWindowVisible(hWnd)) {
+	if (hWnd == NULL || !IsWindowVisible(hWnd) || IsIconic(hWnd)) {
 		return TRUE;
 	}
 
-	//TODO use std::codecvt
-	//LPWSTR windowClassName;
-	//LPWSTR windowTitle;
+	//TODO use std::codecvt?
+
 	char windowClassName[255] = {0};
 	char windowTitle[255] = {0};
 
 	GetClassNameA(hWnd, (LPSTR)windowClassName, sizeof(windowClassName));
 	GetWindowTextA(hWnd, (LPSTR)windowTitle, sizeof(windowTitle));
+
+	//Skip windows with empty titles.
+	if (strlen(windowTitle) == 0) { //don't need strnlen_s AFAIK
+		return TRUE;
+	}
+
+	/* Exclude:
+		Class: "Button", "Shell_TrayWnd", "Internet Explorer_Hidden"
+		Title: "" 
+		hWnd: self
+	*/
 
 	OutputDebugStringA(windowClassName);
 	OutputDebugString(_T(":"));
@@ -268,46 +281,29 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 	RECT windowRect;
 	BOOL result = GetWindowRect(hWnd, &windowRect);
 	if (result) {
-		HKEY hKey;
-		LPWSTR lpcsKey = TEXT("SOFTWARE\\Windmill");
-		LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, NULL);
-		if (openRes == ERROR_SUCCESS) {
-			//error there was no error lol
-			//LPCSTR value = windowTitle; //windowClassName + ":" + windowTitle;
-			TCHAR buffer[32];
-			_stprintf(buffer, _T("%d"), hWnd);
+		//LPCSTR value = windowTitle; //windowClassName + ":" + windowTitle;
+		TCHAR buffer[32];
+		_stprintf(buffer, _T("%d"), hWnd);
 
-			//TODO ignore windows with blank titles?
-			//TODO make buffer max length of 32b int (long) in base10, x4
-			//TODO actually, merge these into a QWORD somehow, if they fit. low words = size, hi words = top left?
-			TCHAR dataBuffer[256];
-			//TODO verify %d works for 64b ints
-			_stprintf(dataBuffer, _T("%d,%d:%dx%d"), windowRect.left, windowRect.top, windowRect.right, windowRect.bottom);
+		//TODO ignore windows with blank titles?
+		//TODO make buffer max length of 32b int (long) in base10, x4 + delimiters (causing "..." in regedit I think)
+		//TODO actually, merge these into a QWORD somehow, if they fit. low words = size, hi words = top left?
+		//-32000,-32000:-31840x-31973
+		TCHAR dataBuffer[32] = {0};
+		//TODO verify %d works for 64b ints
+		_stprintf(dataBuffer, _T("%d,%d:%dx%d"), windowRect.left, windowRect.top, windowRect.right, windowRect.bottom);
 
-			//TODO 32b version of this
-			//TODO use _T() macro evertwhere to use correct fns
-			LONG setRes = RegSetValueEx(hKey, buffer, 0, REG_SZ, (LPBYTE)&dataBuffer, sizeof(dataBuffer));
+		//TODO 32b version of this
+		//TODO use _T() macro evertwhere to use correct fns
+		PHKEY hKey = (PHKEY)lParam;
+		LONG setRes = RegSetValueEx(*hKey, buffer, 0, REG_SZ, (LPBYTE)&dataBuffer, sizeof(dataBuffer));
 
-			if (setRes == ERROR_SUCCESS) {
+		if (setRes == ERROR_SUCCESS) {
 				
-			}
-			else {
-				OutputDebugString(_T("RegSetValueExA failed\r\n"));
-				//handleError(L"RegSetValueExA");
-			}
-
-			LONG closeOut = RegCloseKey(hKey);
-
-			if (closeOut == ERROR_SUCCESS) {
-
-			}
-			else {
-				OutputDebugString(_T("RegCloseKey failed\r\n"));
-				//handleError(L"RegCloseKey");
-			}
-		} else {
-			OutputDebugString(_T("RegCreateKeyEx failed\r\n"));
-			//handleError(L"RegCreateKeyEx");
+		}
+		else {
+			OutputDebugString(_T("RegSetValueExA failed\r\n"));
+			//handleError(L"RegSetValueExA");
 		}
 	}
 	else {
@@ -353,7 +349,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		switch (wmId)
 		{
 		case SWM_SAVE:
-			EnumWindows(EnumWindowsProc, NULL);
+		{
+			HKEY hKey;
+			LPWSTR lpcsKey = TEXT("SOFTWARE\\Windmill");
+			LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, NULL);
+			if (openRes == ERROR_SUCCESS) {//error there was no error lol
+				EnumWindows(EnumWindowsProc, (LPARAM)&hKey);
+
+				LONG closeOut = RegCloseKey(hKey);
+				if (closeOut == ERROR_SUCCESS) {
+					OutputDebugString(_T("RegCloseKey success\r\n"));
+				}
+				else {
+					OutputDebugString(_T("RegCloseKey failed\r\n"));
+					//handleError(L"RegCloseKey");
+				}
+			}
+			else {
+				OutputDebugString(_T("RegCreateKeyEx failed\r\n"));
+				//handleError(L"RegCreateKeyEx");
+			}
+		}
+			
 			break;
 
 		case SWM_RESTORE:
@@ -366,6 +383,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			  _In_     int  cy,
 			  _In_     UINT uFlags
 			);*/
+
+			/*BOOL WINAPI SetWindowPlacement(
+			  _In_       HWND            hWnd,
+			  _In_ const WINDOWPLACEMENT *lpwndpl
+			);
+			*/
 			break;
 
 		case SWM_SHOW:
