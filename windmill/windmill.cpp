@@ -260,10 +260,11 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 	GetClassNameA(hWnd, (LPSTR)windowClassName, sizeof(windowClassName));
 	GetWindowTextA(hWnd, (LPSTR)windowTitle, sizeof(windowTitle));
 
+	OutputDebugStringA(windowClassName);
+	OutputDebugString(_T(":"));
 	OutputDebugStringA(windowTitle);
 	OutputDebugString(_T("\r\n"));
 
-	/* BOOL WINAPI GetWindowRect(_In_  HWND   hWnd, _Out_ LPRECT lpRect);*/
 	RECT windowRect;
 	BOOL result = GetWindowRect(hWnd, &windowRect);
 	if (result) {
@@ -272,12 +273,19 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 		LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, NULL);
 		if (openRes == ERROR_SUCCESS) {
 			//error there was no error lol
-			LPCSTR value = windowTitle; //windowClassName + ":" + windowTitle; //rely on hWnd???
-			//REG_DWORD data = hWnd; //RECT data
+			//LPCSTR value = windowTitle; //windowClassName + ":" + windowTitle;
+			TCHAR buffer[32];
+			_stprintf(buffer, _T("%d"), hWnd);
 
-			//LPCTSTR data = TEXT("OtherTestData\0");
+			//TODO ignore windows with blank titles?
+			//TODO make buffer max length of 32b int (long) in base10, x4
+			//TODO actually, merge these into a QWORD somehow, if they fit. low words = size, hi words = top left?
+			TCHAR dataBuffer[256];
+			_stprintf(dataBuffer, _T("%d,%d:%dx%d"), windowRect.left, windowRect.top, windowRect.right, windowRect.bottom);
 
-			LONG setRes = RegSetValueExA(hKey, value, 0, REG_QWORD, (LPBYTE)&hWnd, sizeof(hWnd));
+			//TODO 32b version of this
+			//TODO use _T() macro evertwhere to use correct fns
+			LONG setRes = RegSetValueEx(hKey, buffer, 0, REG_SZ, (LPBYTE)&dataBuffer, sizeof(dataBuffer));
 
 			if (setRes == ERROR_SUCCESS) {
 				
