@@ -281,6 +281,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 			//TODO make buffer max length of 32b int (long) in base10, x4
 			//TODO actually, merge these into a QWORD somehow, if they fit. low words = size, hi words = top left?
 			TCHAR dataBuffer[256];
+			//TODO verify %d works for 64b ints
 			_stprintf(dataBuffer, _T("%d,%d:%dx%d"), windowRect.left, windowRect.top, windowRect.right, windowRect.bottom);
 
 			//TODO 32b version of this
