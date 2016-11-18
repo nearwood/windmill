@@ -298,6 +298,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 	RECT windowRect;
 
 	if (lParam == 1) {
+		//TODO Should probably use GetWindowPlacement instead
 		BOOL result = GetWindowRect(hWnd, &windowRect);
 		if (result) {
 			TCHAR buffer[32];
@@ -357,6 +358,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 					//LONG width = right - left;
 					//LONG height = top - bottom;
 
+					//TODO Should probably use SetWindowPlacement instead
 					SetWindowPos(hWnd, HWND_NOTOPMOST, left, top, right, bottom, SWP_NOACTIVATE | SWP_NOZORDER);
 				}
 			}
