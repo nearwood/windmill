@@ -45,6 +45,8 @@ HINSTANCE hInst;
 WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 NOTIFYICONDATA niData;
+LPWSTR lpcsKey = _T("SOFTWARE\\Windmill");
+HKEY hKey;
 
 ATOM MyRegisterClass(HINSTANCE hInstance);
 BOOL InitInstance(HINSTANCE, int);
@@ -241,23 +243,38 @@ void handleError(LPCTSTR lpszFunction) {
 		lpszFunction, dw, lpMsgBuf);
 	MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK);
 
-	LocalFree(lpMsgBuf);
-	LocalFree(lpDisplayBuf);
-	//ExitProcess(dw);
+LocalFree(lpMsgBuf);
+LocalFree(lpDisplayBuf);
+//ExitProcess(dw);
+}
+
+BOOL SplitInTwo(TCHAR* left, TCHAR* right, TCHAR* source, CONST TCHAR* delimiter) {
+	PTCHAR tok = _tcstok(source, delimiter);
+	if (tok != NULL) {
+		_tcscpy(left, tok);
+		tok = _tcstok(NULL, delimiter);
+		if (tok != NULL) {
+			_tcscpy(right, tok);
+			return TRUE;
+		}
+	}
+
+	return FALSE;
 }
 
 //TODO lParam should probably be {SAVE, RESTORE} or sth like that, not a PHKEY
 //Just make hKey global, it's C fcs...
-
+// lParam = 1: save; 2: restore
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
+	//Skip invisible and minimized windows.
 	if (hWnd == NULL || !IsWindowVisible(hWnd) || IsIconic(hWnd)) {
 		return TRUE;
 	}
 
 	//TODO use std::codecvt?
 
-	char windowClassName[255] = {0};
-	char windowTitle[255] = {0};
+	char windowClassName[255] = { 0 };
+	char windowTitle[255] = { 0 };
 
 	GetClassNameA(hWnd, (LPSTR)windowClassName, sizeof(windowClassName));
 	GetWindowTextA(hWnd, (LPSTR)windowTitle, sizeof(windowTitle));
@@ -269,7 +286,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 
 	/* Exclude:
 		Class: "Button", "Shell_TrayWnd", "Internet Explorer_Hidden"
-		Title: "" 
+		Title: ""
 		hWnd: self
 	*/
 
@@ -279,36 +296,87 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 	OutputDebugString(_T("\r\n"));
 
 	RECT windowRect;
-	BOOL result = GetWindowRect(hWnd, &windowRect);
-	if (result) {
-		//LPCSTR value = windowTitle; //windowClassName + ":" + windowTitle;
-		TCHAR buffer[32];
-		_stprintf(buffer, _T("%d"), hWnd);
 
-		//TODO ignore windows with blank titles?
-		//TODO make buffer max length of 32b int (long) in base10, x4 + delimiters (causing "..." in regedit I think)
-		//TODO actually, merge these into a QWORD somehow, if they fit. low words = size, hi words = top left?
-		//-32000,-32000:-31840x-31973
-		TCHAR dataBuffer[32] = {0};
-		//TODO verify %d works for 64b ints
-		_stprintf(dataBuffer, _T("%d,%d:%dx%d"), windowRect.left, windowRect.top, windowRect.right, windowRect.bottom);
+	if (lParam == 1) {
+		BOOL result = GetWindowRect(hWnd, &windowRect);
+		if (result) {
+			TCHAR buffer[32];
+			_stprintf(buffer, _T("%d"), hWnd);
 
-		//TODO 32b version of this
-		//TODO use _T() macro evertwhere to use correct fns
-		PHKEY hKey = (PHKEY)lParam;
-		LONG setRes = RegSetValueEx(*hKey, buffer, 0, REG_SZ, (LPBYTE)&dataBuffer, sizeof(dataBuffer));
+			//TODO make buffer max length of 32b int (long) in base10, x4 + delimiters (causing "..." in regedit I think)
+			//TODO actually, merge these into a QWORD somehow, if they fit. low words = size, hi words = top left?
+			//-32000,-32000:-31840x-31973
+			TCHAR dataBuffer[32] = { 0 };
+			//TODO verify %d works for 64b ints
+			_stprintf(dataBuffer, _T("%d,%d:%dx%d"), windowRect.top, windowRect.left, windowRect.bottom, windowRect.right);
 
-		if (setRes == ERROR_SUCCESS) {
-				
+			//TODO use _T() macro evertwhere to use correct fns
+			LONG setRes = RegSetValueEx(hKey, buffer, 0, REG_SZ, (LPBYTE)&dataBuffer, sizeof(dataBuffer));
+
+			if (setRes != ERROR_SUCCESS) {
+				OutputDebugString(_T("RegSetValueEx failed\r\n"));
+				//handleError(L"RegSetValueEx");
+			}
 		}
 		else {
-			OutputDebugString(_T("RegSetValueExA failed\r\n"));
-			//handleError(L"RegSetValueExA");
+			//handleError(L"GetWindowRect");
 		}
 	}
-	else {
-		//handleError(L"GetWindowRect");
-		//handle unqueryable windows? ignore them?
+	else if (lParam == 2) {
+		TCHAR keyValueBuffer[32];
+		TCHAR dataBuffer[256] = { 0 };
+		DWORD dataBufferSize = 255;
+
+		_stprintf(keyValueBuffer, _T("%d"), hWnd);
+
+		LONG getRes = RegGetValue(HKEY_CURRENT_USER, lpcsKey, keyValueBuffer, RRF_RT_REG_SZ | KEY_WOW64_64KEY, NULL, dataBuffer, &dataBufferSize);
+		//TODO handle more data return value
+		//TODO Doesn't seem to like already open hKey? Returns 2 (FNF)
+		if (getRes != ERROR_SUCCESS) {
+			OutputDebugString(_T("RegGetValue failed\r\n"));
+			//handleError(L"RegSetValueExA");
+			return TRUE;
+		}
+
+		LONG left, top, right, bottom;
+		TCHAR tcTopLeft[32], tcBottomRight[32];
+		TCHAR tcTop[32], tcLeft[32], tcBottom[32], tcRight[32];
+
+		if (SplitInTwo(tcTopLeft, tcBottomRight, dataBuffer, _T(":"))) {
+			if (SplitInTwo(tcTop, tcLeft, tcTopLeft, _T(","))) {
+				if (SplitInTwo(tcBottom, tcRight, tcBottomRight, _T("x"))) {
+					top = _tcstol(tcTop, NULL, 10);
+					left = _tcstol(tcLeft, NULL, 10);
+					bottom = _tcstol(tcBottom, NULL, 10);
+					right = _tcstol(tcRight, NULL, 10);
+					//TODO check all those values
+					
+					//TODO Have to store window z order? :/ No: SWP_NOZORDER
+					//Can probably just use hWnd = GetWindow(, GW_HWNDPREV, )
+					//Might want this flag: SWP_ASYNCWINDOWPOS, SWP_NOSIZE
+					//LONG width = right - left;
+					//LONG height = top - bottom;
+
+					SetWindowPos(hWnd, HWND_NOTOPMOST, left, top, right, bottom, SWP_NOACTIVATE | SWP_NOZORDER);
+				}
+			}
+		}
+
+		/* BOOL WINAPI SetWindowPos(
+		_In_     HWND hWnd,
+		_In_opt_ HWND hWndInsertAfter,
+		_In_     int  X,
+		_In_     int  Y,
+		_In_     int  cx,
+		_In_     int  cy,
+		_In_     UINT uFlags
+		);*/
+
+		/*BOOL WINAPI SetWindowPlacement(
+		_In_       HWND            hWnd,
+		_In_ const WINDOWPLACEMENT *lpwndpl
+		);
+		*/
 	}
 
 	return TRUE;
@@ -350,45 +418,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 		case SWM_SAVE:
 		{
-			HKEY hKey;
-			LPWSTR lpcsKey = TEXT("SOFTWARE\\Windmill");
-			LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, NULL);
-			if (openRes == ERROR_SUCCESS) {//error there was no error lol
-				EnumWindows(EnumWindowsProc, (LPARAM)&hKey);
-
-				LONG closeOut = RegCloseKey(hKey);
-				if (closeOut == ERROR_SUCCESS) {
-					OutputDebugString(_T("RegCloseKey success\r\n"));
-				}
-				else {
-					OutputDebugString(_T("RegCloseKey failed\r\n"));
-					//handleError(L"RegCloseKey");
-				}
-			}
-			else {
+			LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &hKey, NULL);
+			if (openRes != ERROR_SUCCESS) {
 				OutputDebugString(_T("RegCreateKeyEx failed\r\n"));
-				//handleError(L"RegCreateKeyEx");
+				break;
 			}
+			
+			EnumWindows(EnumWindowsProc, (LPARAM)1);
 		}
 			
 			break;
 
 		case SWM_RESTORE:
-			/* BOOL WINAPI SetWindowPos(
-			  _In_     HWND hWnd,
-			  _In_opt_ HWND hWndInsertAfter,
-			  _In_     int  X,
-			  _In_     int  Y,
-			  _In_     int  cx,
-			  _In_     int  cy,
-			  _In_     UINT uFlags
-			);*/
+		{
+			//LPWSTR lpcsKey = TEXT("SOFTWARE\\Windmill");
+			LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &hKey, NULL);
+			if (openRes != ERROR_SUCCESS) {
+				OutputDebugString(_T("RegCreateKeyEx failed\r\n"));
+				break;
+			}
 
-			/*BOOL WINAPI SetWindowPlacement(
-			  _In_       HWND            hWnd,
-			  _In_ const WINDOWPLACEMENT *lpwndpl
-			);
-			*/
+			EnumWindows(EnumWindowsProc, (LPARAM)2);
+		}
 			break;
 
 		case SWM_SHOW:
@@ -418,17 +469,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 
 	case WM_DESTROY:
+	{
+		LONG closeOut = RegCloseKey(hKey);
+		if (closeOut != ERROR_SUCCESS) {
+			OutputDebugString(_T("RegCloseKey failed\r\n"));
+			//handleError(L"RegCloseKey");
+		}
 		niData.uFlags = 0;
 		Shell_NotifyIcon(NIM_DELETE, &niData);
 		PostQuitMessage(0);
+	}
 		break;
 
 	case WM_PAINT:
-		{
-			PAINTSTRUCT ps;
-			HDC hdc = BeginPaint(hWnd, &ps);
-			EndPaint(hWnd, &ps);
-		}
+	{
+		PAINTSTRUCT ps;
+		HDC hdc = BeginPaint(hWnd, &ps);
+		EndPaint(hWnd, &ps);
+	}
 		break;
 
 	default:
