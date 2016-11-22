@@ -18,14 +18,20 @@
  */
 
 /* windmill - save/restore window positions via the tray
- * Phase 0: ✔  Basic Win32 tray app
- * Phase 1: WIP Save window positions manually via tray menu (to registry)
- * Phase 2: WIP Restore window positions manually via tray menu (from registry)
- * Phase 3:     Ensure windows will stay within bounds.
- * Phase 3:     32/64-bit compatibility
- * Phase 4:     Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
- * Phase 5:     Allow configuration of trigger hardware
- * Phase C:     Cmake for possible cross-platform support?
+ * VERSION PROGRESS DETAILS
+ * 0.1:    ✔        Basic Win32 tray app
+ * 0.2:    ✔        Save window positions manually via tray menu (to registry)
+ * 0.3:    ✔        Restore window positions manually via tray menu (from registry)
+ * 0.5:             UI and registry settings to filter windows to save (or restore?)
+ * 0.6:             Ensure windows will stay within bounds.
+ * 1.0:             32/64-bit compatibility
+ * 2.0:             Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
+ * 2.5:             Allow configuration of trigger hardware
+ * X:               Cmake for possible cross-platform support?
+
+ Known issues:
+ - Can't modify administrator process' windows
+ - 
  */
 
 #include "stdafx.h"
@@ -46,7 +52,7 @@ HINSTANCE hInst;
 WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 NOTIFYICONDATA niData;
-LPWSTR lpcsKey = _T("SOFTWARE\\Windmill");
+LPWSTR lpcsKey = TEXT("SOFTWARE\\Windmill");
 HKEY hKey;
 
 ATOM MyRegisterClass(HINSTANCE hInstance);
@@ -139,20 +145,20 @@ void ShowContextMenu(HWND hWnd)
 
 	if (hMenu)
 	{
-		AppendMenu(hMenu, MF_STRING, SWM_SAVE, _T("Save windows"));
-		AppendMenu(hMenu, MF_STRING, SWM_RESTORE, _T("Restore windows"));
+		AppendMenu(hMenu, MF_STRING, SWM_SAVE, TEXT("Save windows"));
+		AppendMenu(hMenu, MF_STRING, SWM_RESTORE, TEXT("Restore windows"));
 		AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
 
 		if (IsWindowVisible(hWnd))
 		{
-			AppendMenu(hMenu, MF_STRING, SWM_HIDE, _T("Hide"));
+			AppendMenu(hMenu, MF_STRING, SWM_HIDE, TEXT("Hide"));
 		}
 		else
 		{
-			AppendMenu(hMenu, MF_STRING, SWM_SHOW, _T("Show"));
+			AppendMenu(hMenu, MF_STRING, SWM_SHOW, TEXT("Show"));
 		}
 			
-		AppendMenu(hMenu, MF_STRING, SWM_EXIT, _T("Exit"));
+		AppendMenu(hMenu, MF_STRING, SWM_EXIT, TEXT("Exit"));
 
 		//Set menu to the foreground or it won't appear.
 		SetForegroundWindow(hWnd);
@@ -169,7 +175,7 @@ BOOL OnInitDialog(HWND hWnd)
 	if (hMenu)
 	{
 		AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
-		AppendMenu(hMenu, MF_STRING, IDM_ABOUT, _T("About"));
+		AppendMenu(hMenu, MF_STRING, IDM_ABOUT, TEXT("About"));
 	}
 
 	HICON hIcon = (HICON)LoadImage(hInst, MAKEINTRESOURCE(IDI_WINDMILL), IMAGE_ICON, 0, 0, LR_SHARED | LR_DEFAULTSIZE);
@@ -193,7 +199,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	ZeroMemory(&niData, sizeof(NOTIFYICONDATA));
 
 	//TODO Handle differences in features across XP->7 (Quiet time, etc.)
-	ULONGLONG ullVersion = GetDllVersion(_T("Shell32.dll"));
+	ULONGLONG ullVersion = GetDllVersion(TEXT("Shell32.dll"));
 	if (ullVersion >= MAKEDLLVERULL(5, 0, 0, 0))
 		niData.cbSize = sizeof(NOTIFYICONDATA);
 	else niData.cbSize = NOTIFYICONDATA_V2_SIZE;
@@ -205,7 +211,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	niData.hWnd = hWnd;
 	niData.uCallbackMessage = SWM_TRAYMSG;
 
-	lstrcpyn(niData.szTip, _T("Windmill"), sizeof(niData.szTip) / sizeof(TCHAR));
+	lstrcpyn(niData.szTip, TEXT("Windmill"), sizeof(niData.szTip) / sizeof(TCHAR));
 
 	Shell_NotifyIcon(NIM_ADD, &niData);
 
@@ -244,14 +250,10 @@ void handleError(LPCTSTR lpszFunction) {
 		lpszFunction, dw, lpMsgBuf);
 	MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK);
 
-LocalFree(lpMsgBuf);
-LocalFree(lpDisplayBuf);
-//ExitProcess(dw);
+	LocalFree(lpMsgBuf);
+	LocalFree(lpDisplayBuf);
 }
 
-//TODO lParam should probably be {SAVE, RESTORE} or sth like that, not a PHKEY
-//Just make hKey global, it's C fcs...
-// lParam = 1: save; 2: restore
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 	//Skip invisible and minimized windows.
 	if (hWnd == NULL || !IsWindowVisible(hWnd) || IsIconic(hWnd)) {
@@ -278,26 +280,26 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 	*/
 
 	TCHAR buffer[32] = { 0 };
-	_stprintf(buffer, _T("%#x:"), hWnd);
+	_stprintf(buffer, TEXT("%#x:"), hWnd);
 	OutputDebugString(buffer);
 	OutputDebugStringA(windowClassName);
-	OutputDebugString(_T(":"));
+	OutputDebugString(TEXT(":"));
 	OutputDebugStringA(windowTitle);
-	OutputDebugString(_T("\r\n"));
+	OutputDebugString(TEXT("\r\n"));
 
 	WINDOWPLACEMENT windowPlacement;
 
-	if (lParam == 1) {
+	if (lParam == SWM_SAVE) {
 		BOOL result = GetWindowPlacement(hWnd, &windowPlacement);
 		if (result) {
 			TCHAR buffer[32] = { 0 };
-			_stprintf(buffer, _T("%#016x"), hWnd);
+			_stprintf(buffer, TEXT("%#016x"), hWnd);
 
-			//TODO use _T() macro evertwhere to use correct fns
+			//TODO use TEXT() macro evertwhere to use correct fns
 			LONG setRes = RegSetValueEx(hKey, buffer, 0, REG_BINARY, (LPBYTE)&windowPlacement, sizeof(windowPlacement));
 
 			if (setRes != ERROR_SUCCESS) {
-				OutputDebugString(_T("RegSetValueEx failed\r\n"));
+				OutputDebugString(TEXT("RegSetValueEx failed\r\n"));
 				//handleError(L"RegSetValueEx");
 			}
 		}
@@ -305,15 +307,15 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 			//handleError(L"GetWindowRect");
 		}
 	}
-	else if (lParam == 2) {
+	else if (lParam == SWM_RESTORE) {
 		TCHAR keyValueBuffer[32] = { 0 };
 		DWORD lwpSize = sizeof(WINDOWPLACEMENT);
 
-		_stprintf(keyValueBuffer, _T("%#016x"), hWnd);
+		_stprintf(keyValueBuffer, TEXT("%#016x"), hWnd);
 
 		LONG getRes = RegQueryValueEx(hKey, keyValueBuffer, NULL, NULL, (LPBYTE)&windowPlacement, &lwpSize);
 		if (getRes != ERROR_SUCCESS) {
-			OutputDebugString(_T("RegQueryValueEx failed\r\n"));
+			OutputDebugString(TEXT("RegQueryValueEx failed\r\n"));
 			//handleError(L"RegSetValueExA");
 			return TRUE;
 		}
@@ -321,8 +323,8 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 		windowPlacement.length = sizeof(WINDOWPLACEMENT); //lwpSize;
 
 		if (!SetWindowPlacement(hWnd, &windowPlacement)) {
-			handleError(_T("SetWindowPlacement"));
-			//OutputDebugString(_T("SetWindowPlacement failed\r\n"));
+			handleError(TEXT("SetWindowPlacement"));
+			//OutputDebugString(TEXT("SetWindowPlacement failed\r\n"));
 		}
 	}
 
@@ -367,11 +369,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &hKey, NULL);
 			if (openRes != ERROR_SUCCESS) {
-				OutputDebugString(_T("RegCreateKeyEx failed\r\n"));
+				OutputDebugString(TEXT("RegCreateKeyEx failed\r\n"));
 				break;
 			}
 			
-			EnumWindows(EnumWindowsProc, (LPARAM)1);
+			EnumWindows(EnumWindowsProc, SWM_SAVE);
 		}
 			
 			break;
@@ -381,11 +383,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			//LPWSTR lpcsKey = TEXT("SOFTWARE\\Windmill");
 			LONG openRes = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &hKey, NULL);
 			if (openRes != ERROR_SUCCESS) {
-				OutputDebugString(_T("RegCreateKeyEx failed\r\n"));
+				OutputDebugString(TEXT("RegCreateKeyEx failed\r\n"));
 				break;
 			}
 
-			EnumWindows(EnumWindowsProc, (LPARAM)2);
+			EnumWindows(EnumWindowsProc, SWM_RESTORE);
 		}
 			break;
 
@@ -419,7 +421,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		LONG closeOut = RegCloseKey(hKey);
 		if (closeOut != ERROR_SUCCESS) {
-			OutputDebugString(_T("RegCloseKey failed\r\n"));
+			OutputDebugString(TEXT("RegCloseKey failed\r\n"));
 			//handleError(L"RegCloseKey");
 		}
 		niData.uFlags = 0;
