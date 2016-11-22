@@ -20,7 +20,8 @@
 /* windmill - save/restore window positions via the tray
  * Phase 0: ✔  Basic Win32 tray app
  * Phase 1: WIP Save window positions manually via tray menu (to registry)
- * Phase 2:     Restore window positions manually via tray menu (from registry)
+ * Phase 2: WIP Restore window positions manually via tray menu (from registry)
+ * Phase 3:     Ensure windows will stay within bounds.
  * Phase 3:     32/64-bit compatibility
  * Phase 4:     Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
  * Phase 5:     Allow configuration of trigger hardware
@@ -248,20 +249,6 @@ LocalFree(lpDisplayBuf);
 //ExitProcess(dw);
 }
 
-BOOL SplitInTwo(TCHAR* left, TCHAR* right, TCHAR* source, CONST TCHAR* delimiter) {
-	PTCHAR tok = _tcstok(source, delimiter);
-	if (tok != NULL) {
-		_tcscpy(left, tok);
-		tok = _tcstok(NULL, delimiter);
-		if (tok != NULL) {
-			_tcscpy(right, tok);
-			return TRUE;
-		}
-	}
-
-	return FALSE;
-}
-
 //TODO lParam should probably be {SAVE, RESTORE} or sth like that, not a PHKEY
 //Just make hKey global, it's C fcs...
 // lParam = 1: save; 2: restore
@@ -290,29 +277,24 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 		hWnd: self
 	*/
 
+	TCHAR buffer[32] = { 0 };
+	_stprintf(buffer, _T("%#x:"), hWnd);
+	OutputDebugString(buffer);
 	OutputDebugStringA(windowClassName);
 	OutputDebugString(_T(":"));
 	OutputDebugStringA(windowTitle);
 	OutputDebugString(_T("\r\n"));
 
-	RECT windowRect;
+	WINDOWPLACEMENT windowPlacement;
 
 	if (lParam == 1) {
-		//TODO Should probably use GetWindowPlacement instead
-		BOOL result = GetWindowRect(hWnd, &windowRect);
+		BOOL result = GetWindowPlacement(hWnd, &windowPlacement);
 		if (result) {
-			TCHAR buffer[32];
-			_stprintf(buffer, _T("%d"), hWnd);
-
-			//TODO make buffer max length of 32b int (long) in base10, x4 + delimiters (causing "..." in regedit I think)
-			//TODO actually, merge these into a QWORD somehow, if they fit. low words = size, hi words = top left?
-			//-32000,-32000:-31840x-31973
-			TCHAR dataBuffer[32] = { 0 };
-			//TODO verify %d works for 64b ints
-			_stprintf(dataBuffer, _T("%d,%d:%dx%d"), windowRect.top, windowRect.left, windowRect.bottom, windowRect.right);
+			TCHAR buffer[32] = { 0 };
+			_stprintf(buffer, _T("%#016x"), hWnd);
 
 			//TODO use _T() macro evertwhere to use correct fns
-			LONG setRes = RegSetValueEx(hKey, buffer, 0, REG_SZ, (LPBYTE)&dataBuffer, sizeof(dataBuffer));
+			LONG setRes = RegSetValueEx(hKey, buffer, 0, REG_BINARY, (LPBYTE)&windowPlacement, sizeof(windowPlacement));
 
 			if (setRes != ERROR_SUCCESS) {
 				OutputDebugString(_T("RegSetValueEx failed\r\n"));
@@ -324,61 +306,24 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 		}
 	}
 	else if (lParam == 2) {
-		TCHAR keyValueBuffer[32];
-		TCHAR dataBuffer[256] = { 0 };
-		DWORD dataBufferSize = 255;
+		TCHAR keyValueBuffer[32] = { 0 };
+		DWORD lwpSize = sizeof(WINDOWPLACEMENT);
 
-		_stprintf(keyValueBuffer, _T("%d"), hWnd);
+		_stprintf(keyValueBuffer, _T("%#016x"), hWnd);
 
-		LONG getRes = RegGetValue(HKEY_CURRENT_USER, lpcsKey, keyValueBuffer, RRF_RT_REG_SZ | KEY_WOW64_64KEY, NULL, dataBuffer, &dataBufferSize);
-		//TODO handle more data return value
-		//TODO Doesn't seem to like already open hKey? Returns 2 (FNF)
+		LONG getRes = RegQueryValueEx(hKey, keyValueBuffer, NULL, NULL, (LPBYTE)&windowPlacement, &lwpSize);
 		if (getRes != ERROR_SUCCESS) {
-			OutputDebugString(_T("RegGetValue failed\r\n"));
+			OutputDebugString(_T("RegQueryValueEx failed\r\n"));
 			//handleError(L"RegSetValueExA");
 			return TRUE;
 		}
 
-		LONG left, top, right, bottom;
-		TCHAR tcTopLeft[32], tcBottomRight[32];
-		TCHAR tcTop[32], tcLeft[32], tcBottom[32], tcRight[32];
+		windowPlacement.length = sizeof(WINDOWPLACEMENT); //lwpSize;
 
-		if (SplitInTwo(tcTopLeft, tcBottomRight, dataBuffer, _T(":"))) {
-			if (SplitInTwo(tcTop, tcLeft, tcTopLeft, _T(","))) {
-				if (SplitInTwo(tcBottom, tcRight, tcBottomRight, _T("x"))) {
-					top = _tcstol(tcTop, NULL, 10);
-					left = _tcstol(tcLeft, NULL, 10);
-					bottom = _tcstol(tcBottom, NULL, 10);
-					right = _tcstol(tcRight, NULL, 10);
-					//TODO check all those values
-					
-					//TODO Have to store window z order? :/ No: SWP_NOZORDER
-					//Can probably just use hWnd = GetWindow(, GW_HWNDPREV, )
-					//Might want this flag: SWP_ASYNCWINDOWPOS, SWP_NOSIZE
-					//LONG width = right - left;
-					//LONG height = top - bottom;
-
-					//TODO Should probably use SetWindowPlacement instead
-					SetWindowPos(hWnd, HWND_NOTOPMOST, left, top, right, bottom, SWP_NOACTIVATE | SWP_NOZORDER);
-				}
-			}
+		if (!SetWindowPlacement(hWnd, &windowPlacement)) {
+			handleError(_T("SetWindowPlacement"));
+			//OutputDebugString(_T("SetWindowPlacement failed\r\n"));
 		}
-
-		/* BOOL WINAPI SetWindowPos(
-		_In_     HWND hWnd,
-		_In_opt_ HWND hWndInsertAfter,
-		_In_     int  X,
-		_In_     int  Y,
-		_In_     int  cx,
-		_In_     int  cy,
-		_In_     UINT uFlags
-		);*/
-
-		/*BOOL WINAPI SetWindowPlacement(
-		_In_       HWND            hWnd,
-		_In_ const WINDOWPLACEMENT *lpwndpl
-		);
-		*/
 	}
 
 	return TRUE;

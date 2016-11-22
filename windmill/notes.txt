@@ -2,4 +2,10 @@
 EnumWindows has access violations when trying to access (I'm guessing) 64-bit windows when compiled as 32-bit.
 Should not be run as 32-bit on 64-bit Windows.
 
-11/16/15 - tray app done. saving to registry. will need to try out several methods of identifying windows, since the title may change. going to try just using hWnd.
+11/16/16 - tray app done. saving to registry. will need to try out several methods of identifying windows, since the title may change. going to try just using hWnd.
+
+11/18/16 - Restore attempt. Windows went flying. GetWindowPos() is not enough. Need other state information. GetWindowPlacement/SetWindowPlacement, etc.
+
+11/21/16 - Yay it works right. Storing data as REG_BINARY and using SetWindowPlacement was much easier.
+Will have to check that monitors (screen size) supports restoring windows to their saved spots, otherwise skip.
+Also will need some kind of whitelist, too many processes/funky fake windows...
