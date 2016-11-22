@@ -1,0 +1,5 @@
+11/15/16 - Start
+EnumWindows has access violations when trying to access (I'm guessing) 64-bit windows when compiled as 32-bit.
+Should not be run as 32-bit on 64-bit Windows.
+
+11/16/15 - tray app done. saving to registry. will need to try out several methods of identifying windows, since the title may change. going to try just using hWnd.

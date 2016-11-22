@@ -1,0 +1,8 @@
+syntax: glob
+Debug\*
+*.db
+windmill\Debug\*
+*.user
+ipch\*
+*.opendb
+*.suo
