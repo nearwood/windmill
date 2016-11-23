@@ -1,33 +1,31 @@
-﻿/* windmill
- * Copyright 2016 Nick Earwood <nearwood@gmail.com>
- */
+﻿/* Windmill
+ Copyright 2016 Nick Earwood <nearwood@gmail.com>
 
-/*
- windmill is free software: you can redistribute it and/or modify
+ Windmill is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
 
- windmill is distributed in the hope that it will be useful,
+ Windmill is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License
- along with windmill.  If not, see <http://www.gnu.org/licenses/>.
+ along with Windmill.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* windmill - save/restore window positions via the tray
+/* Windmill - save/restore window positions via the tray
  * VERSION PROGRESS DETAILS
- * 0.1:    ✔        Basic Win32 tray app
- * 0.2:    ✔        Save window positions manually via tray menu (to registry)
- * 0.3:    ✔        Restore window positions manually via tray menu (from registry)
- * 0.5:             UI and registry settings to filter windows to save (or restore?)
- * 0.6:             Ensure windows will stay within bounds.
- * 1.0:             32/64-bit compatibility
- * 2.0:             Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
- * 2.5:             Allow configuration of trigger hardware
- * X:               Cmake for possible cross-platform support?
+ * 0.1     ✔        Basic Win32 tray app
+ * 0.2     ✔        Save window positions manually via tray menu (to registry)
+ * 0.3     ✔        Restore window positions manually via tray menu (from registry)
+ * 0.4              Ensure windows will stay within bounds.
+ * 0.5              32/64-bit compatibility
+ * 1.0              UI and registry settings to filter windows to save (or restore?)
+ * 2.0              Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
+ * 2.5              Allow configuration of trigger hardware
+ * X.Y              Cmake for possible cross-platform support?
 
  Known issues:
  - Can't modify administrator process' windows
@@ -254,6 +252,32 @@ void handleError(LPCTSTR lpszFunction) {
 	LocalFree(lpDisplayBuf);
 }
 
+//Note parameters are reversed to what PtInRect might imply
+BOOL RectInRect(CONST RECT *lprcA, CONST RECT *lprcB) {
+	POINT topLeft, bottomRight;
+	
+	topLeft.x = lprcA->left;
+	topLeft.y = lprcA->top;
+	bottomRight.x = lprcA->bottom;
+	bottomRight.y = lprcA->right;
+
+	return PtInRect(lprcB, topLeft) && PtInRect(lprcB, bottomRight);
+}
+
+BOOL CheckWindowPlacementAgainstScreen(CONST WINDOWPLACEMENT *windowPlacement) {
+	RECT desktopRect; //TODO Move this to once per restore command.
+	desktopRect.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+	desktopRect.bottom = GetSystemMetrics(SM_CYVIRTUALSCREEN) + desktopRect.top;
+	desktopRect.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+	desktopRect.right = GetSystemMetrics(SM_CXVIRTUALSCREEN) + desktopRect.left;
+	
+	if (RectInRect(&(windowPlacement->rcNormalPosition), &desktopRect)) {
+		return TRUE;
+	}
+
+	//GetSystemMetrics(SM_CMONITORS); //get # of monitors
+}
+
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 	//Skip invisible and minimized windows.
 	if (hWnd == NULL || !IsWindowVisible(hWnd) || IsIconic(hWnd)) {
@@ -321,9 +345,15 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 
 		windowPlacement.length = sizeof(WINDOWPLACEMENT); //lwpSize;
 
+		
+		if (CheckWindowPlacementAgainstScreen(&windowPlacement)) {
+			OutputDebugString(TEXT("Window would be out of bounds\r\n"));
+			return TRUE;
+		}
+		
 		if (!SetWindowPlacement(hWnd, &windowPlacement)) {
-			handleError(TEXT("SetWindowPlacement"));
-			//OutputDebugString(TEXT("SetWindowPlacement failed\r\n"));
+			//handleError(TEXT("SetWindowPlacement error"));
+			OutputDebugString(TEXT("SetWindowPlacement failed\r\n"));
 		}
 	}
 
