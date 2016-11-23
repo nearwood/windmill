@@ -367,19 +367,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 		case SWM_SAVE:
 		{
-			opResult = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, KEY_WOW64_64KEY, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &hKey, NULL);
+			//Clear out old values
+			//opResult = RegDeleteTree(hKey, lpcsKey);
+			//opResult = RegDeleteKeyEx(hKey, lpcsKey, KEY_WOW64_64KEY, NULL); //returns 2 (FNF)
+			opResult = RegDeleteKeyEx(HKEY_CURRENT_USER, lpcsKey, KEY_WOW64_64KEY, NULL);
+			if (opResult != ERROR_SUCCESS) {
+				OutputDebugString(TEXT("RegDeleteTree failed\r\n"));
+				break;
+			}
+
+			opResult = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY | DELETE, NULL, &hKey, NULL);
 			if (opResult != ERROR_SUCCESS) {
 				OutputDebugString(TEXT("RegCreateKeyEx failed\r\n"));
 				break;
 			}
 
-			//Clear out old values
-			opResult = RegDeleteTree(hKey, lpcsKey);
-			if (opResult != ERROR_SUCCESS) {
-				OutputDebugString(TEXT("RegDeleteTree failed\r\n"));
-				break;
-			}
-			
 			EnumWindows(EnumWindowsProc, SWM_SAVE);
 		}
 			
@@ -388,7 +390,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case SWM_RESTORE:
 		{
 			//LPWSTR lpcsKey = TEXT("SOFTWARE\\Windmill");
-			opResult = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &hKey, NULL);
+			opResult = RegCreateKeyEx(HKEY_CURRENT_USER, lpcsKey, NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &hKey, NULL);
 			if (opResult != ERROR_SUCCESS) {
 				OutputDebugString(TEXT("RegCreateKeyEx failed\r\n"));
 				break;
