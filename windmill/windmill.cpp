@@ -368,10 +368,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case SWM_SAVE:
 		{
 			//Clear out old values
-			//opResult = RegDeleteTree(hKey, lpcsKey);
-			//opResult = RegDeleteKeyEx(hKey, lpcsKey, KEY_WOW64_64KEY, NULL); //returns 2 (FNF)
+			//opResult = RegDeleteTree(HKEY_CURRENT_USER, lpcsKey); //Is this for x64? Think it's using redirection
+			//opResult = RegDeleteKeyEx(hKey, lpcsKey, KEY_WOW64_64KEY, NULL); //returns 2 (FNF) ¯\_(ツ)_/¯
 			opResult = RegDeleteKeyEx(HKEY_CURRENT_USER, lpcsKey, KEY_WOW64_64KEY, NULL);
-			if (opResult != ERROR_SUCCESS) {
+			if (opResult != ERROR_SUCCESS && opResult != ERROR_FILE_NOT_FOUND) {
 				OutputDebugString(TEXT("RegDeleteTree failed\r\n"));
 				break;
 			}
