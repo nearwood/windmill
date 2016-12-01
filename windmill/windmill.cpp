@@ -276,6 +276,7 @@ BOOL CheckWindowPlacementAgainstScreen(CONST WINDOWPLACEMENT *windowPlacement) {
 	}
 
 	//GetSystemMetrics(SM_CMONITORS); //get # of monitors
+	return FALSE;
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
