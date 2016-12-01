@@ -20,7 +20,7 @@
  * 0.1     ✔        Basic Win32 tray app
  * 0.2     ✔        Save window positions manually via tray menu (to registry)
  * 0.3     ✔        Restore window positions manually via tray menu (from registry)
- * 0.4              Ensure windows will stay within bounds.
+ * 0.4     ✔        Ensure windows will stay within bounds.
  * 0.5              32/64-bit compatibility
  * 1.0              UI and registry settings to filter windows to save (or restore?)
  * 2.0              Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
@@ -147,14 +147,14 @@ void ShowContextMenu(HWND hWnd)
 		AppendMenu(hMenu, MF_STRING, SWM_RESTORE, TEXT("Restore windows"));
 		AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
 
-		if (IsWindowVisible(hWnd))
+		/*if (IsWindowVisible(hWnd))
 		{
 			AppendMenu(hMenu, MF_STRING, SWM_HIDE, TEXT("Hide"));
 		}
 		else
 		{
 			AppendMenu(hMenu, MF_STRING, SWM_SHOW, TEXT("Show"));
-		}
+		}*/
 			
 		AppendMenu(hMenu, MF_STRING, SWM_EXIT, TEXT("Exit"));
 
