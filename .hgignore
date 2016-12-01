@@ -1,7 +1,9 @@
 syntax: glob
 Debug\*
+x64\*
 *.db
 windmill\Debug\*
+windmill\x64\*
 *.user
 ipch\*
 *.opendb

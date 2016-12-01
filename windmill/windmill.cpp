@@ -204,7 +204,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 	niData.uID = ID_TRAY_ICON;
 	niData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-	niData.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_WINDMILL));
+	niData.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
 	niData.hWnd = hWnd;
 	niData.uCallbackMessage = SWM_TRAYMSG;
