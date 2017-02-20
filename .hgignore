@@ -1,8 +1,6 @@
 syntax: glob
-Debug\*
-x64\*
 *.db
-windmill\Debug\*
+windmill\Win32\*
 windmill\x64\*
 *.user
 ipch\*
