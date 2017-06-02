@@ -15,28 +15,31 @@
  along with Windmill.  If not, see <http://www.gnu.org/licenses/>.
  */
 
- /* Windmill - save/restore window positions via the tray
-  * VERSION PROGRESS DETAILS
-  * 0.1     ✔        Basic Win32 tray app
-  * 0.2     ✔        Save window positions manually via tray menu (to registry)
-  * 0.3     ✔        Restore window positions manually via tray menu (from registry)
-  * 0.4     ✔        Ensure windows will stay within bounds.
-  * 0.4.1   ✔        Reformat code, some cross-platform fixes, -Os instead of -01
-  * 0.5              32/64-bit compatibility
-  * 1.0              UI and registry settings to filter windows to save (or restore?)
-  * 2.0              Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
-  * 2.5              Allow configuration of trigger hardware
-  * X.Y              Cmake for possible cross-platform support?
+/* Windmill - save/restore window positions via the tray
+ * VERSION PROGRESS DETAILS
+ * 0.1     ✔        Basic Win32 tray app
+ * 0.2     ✔        Save window positions manually via tray menu (to registry)
+ * 0.3     ✔        Restore window positions manually via tray menu (from registry)
+ * 0.4     ✔        Ensure windows will stay within bounds.
+ * 0.4.1   ✔        Reformat code, some cross-platform fixes, -Os instead of -01
+ * 0.4.2   ✔        Never show main window
+ * 0.4.3            Add Keyboard Accelerators
+ * 0.5              32/64-bit compatibility
+ * 1.0              UI and registry settings to filter windows to save (or restore?)
+ * 2.0              Detect specific dock-associated hardware and trigger based on that, or is there a Windows Power/Dock API?
+ * 2.5              Allow configuration of trigger hardware
+ * X.Y              Cmake for possible cross-platform support?
+ */
 
-  Known issues:
-  - Can't modify administrator process' windows
-  - Maximization state not restored
-  */
+/* Known issues:
+ * Can't modify administrator process' windows
+ * Maximization state not restored correctly (Windows bug?)
+ */
 
 #include "stdafx.h"
 #include "windmill.h"
 
-  //kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)
+//Unused libs: kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)
 
 #define MAX_LOADSTRING 100
 #define ID_TRAY_ICON   1
@@ -210,9 +213,6 @@ BOOL InitInstance(HINSTANCE hInstance, INT nCmdShow) {
         niData.hIcon = NULL;
     }
 
-    //ShowWindow(hWnd, nCmdShow);
-    //UpdateWindow(hWnd);
-
     return TRUE;
 }
 
@@ -361,7 +361,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case SWM_TRAYMSG:
             switch (lParam) {
                 case WM_LBUTTONDBLCLK:
-                    ShowWindow(hWnd, SW_RESTORE);
+                    //ShowWindow(hWnd, SW_RESTORE);
                     break;
                 case WM_RBUTTONDOWN:
                 case WM_CONTEXTMENU:
@@ -418,7 +418,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 break;
 
                 case SWM_SHOW:
-                    ShowWindow(hWnd, SW_RESTORE);
+                    //ShowWindow(hWnd, SW_RESTORE);
                     break;
 
                 case SWM_HIDE:
